@@ -35,12 +35,33 @@ void setup() {
   Serial.begin(9600);
   WiFi.begin(ssid, password);
 
+  // Wait for WiFi connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
 
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Initialize MAX30102 (PulseSensor)
+  if (!pulseSensor.begin()) {
+    Serial.println("MAX30102 Initialization failed!");
+    while (1);
+  }
+
+  // Initialize sensor pins
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  // Initialize Twilio
+  Twilio.begin(accountSid, authToken, twilioNumber);
+}
+
 void sendCaptureRequest() {
+  WiFiClient client;
   if (client.connect(serverIP, serverPort)) {
     client.println("GET /trigger HTTP/1.1");
     client.println("Host: " + String(serverIP));
@@ -50,24 +71,6 @@ void sendCaptureRequest() {
   } else {
     Serial.println("Failed to connect to server.");
   }
-}
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  // Initialize MAX30102
-  if (!pulseSensor.begin()) {
-    Serial.println("MAX30102 Initialization failed!");
-    while (1);
-  }
-
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-
-  // Initialize Twilio
-  Twilio.begin(accountSid, authToken, twilioNumber);
 }
 
 void loop() {
@@ -87,6 +90,7 @@ void loop() {
   // Read soil moisture level
   int soilMoisture = analogRead(soilMoistureSensorPin);
 
+  // Print values for debugging
   Serial.print("Distance: ");
   Serial.print(distance);
   Serial.println(" cm");
@@ -98,33 +102,47 @@ void loop() {
   Serial.print("Soil Moisture: ");
   Serial.println(soilMoisture);
 
-  // Check for alert conditions and send SMS
-  if (distance > distanceThreshold || soilMoisture > wetBedThreshold || (bpm > highHeartRateThreshold || bpm < lowHeartRateThreshold)) {
-    String message = "Alert! ";
-    if (distance > distanceThreshold) {
-      message += "Baby is not there. ";
-    }
-    if (soilMoisture > wetBedThreshold) {
-      message += "Bed is wet. ";
-    }
-    if (bpm > highHeartRateThreshold || bpm < lowHeartRateThreshold) {
-      message += "Abnormal heart rate detected. ";
-    }
-    Twilio.sendMessage(myNumber, message);
-    Serial.println("Alert sent via SMS");
+  // Check for alert conditions
+  bool alertTriggered = false;
+  String message = "Alert! ";
+
+  if (distance > distanceThreshold) {
+    message += "Baby is not there. ";
+    alertTriggered = true;
+  }
+  
+  if (soilMoisture > wetBedThreshold) {
+    message += "Bed is wet. ";
+    alertTriggered = true;
+  }
+  
+  if (bpm > highHeartRateThreshold || bpm < lowHeartRateThreshold) {
+    message += "Abnormal heart rate detected. ";
+    alertTriggered = true;
   }
 
-  // Send data to ThingSpeak
-  String url = "https://" + String(server) + "/update?api_key=" + apiKey + "&field1=" + String(distance) + "&field2=" + String(bpm) + "&field3=" + String(soilMoisture);
-  HTTPClient http;
-  http.begin(url);
-  int httpCode = http.POST("");
-  if (httpCode == HTTP_CODE_OK) {
-    Serial.println("Data sent to ThingSpeak successfully");
-  } else {
-    Serial.println("HTTP Request failed");
+  // If an alert was triggered, send the SMS and ThingSpeak data
+  if (alertTriggered) {
+    // Send SMS using Twilio
+    Twilio.sendMessage(myNumber, message);
+    Serial.println("Alert sent via SMS");
+
+    // Send data to ThingSpeak
+    String url = "https://" + String(server) + "/update?api_key=" + apiKey + "&field1=" + String(distance) + "&field2=" + String(bpm) + "&field3=" + String(soilMoisture);
+    HTTPClient http;
+    http.begin(url);
+    int httpCode = http.POST("");
+    if (httpCode == HTTP_CODE_OK) {
+      Serial.println("Data sent to ThingSpeak successfully");
+    } else {
+      Serial.println("HTTP Request failed");
+    }
+    http.end();
+
+    // Optionally send a capture request to another server
+    sendCaptureRequest();
   }
-  http.end();
-  sendCaptureRequest();
-  delay(1000); // Adjust the delay as needed
+
+  // Wait before next loop iteration
+  delay(1000); 
 }
