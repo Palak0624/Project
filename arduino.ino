@@ -7,6 +7,8 @@
 // Wi-Fi Credentials
 const char* ssid = "Palak";
 const char* password = "11223344";
+const char* serverIP = "192.168.65.252"; 
+const int serverPort = 5000;
 
 // ThingSpeak Credentials
 const char* apiKey = "M92AZJD2DA38OTXB";
@@ -15,8 +17,8 @@ const char* server = "api.thingspeak.com";
 // Twilio Credentials
 const char* accountSid = "MG13beed3d3141a15e5566218287f5d710";
 const char* authToken = "AC5696048cd1c8df42f2e639e36b8b8fcf";
-const char* twilioNumber = "+1234567890"; // Your Twilio phone number
-const char* myNumber = "+917617724456"; // Your phone number
+const char* twilioNumber = "+1234567890"; 
+const char* myNumber = "+917617724456";
 
 // Sensor Pins and Thresholds
 const int trigPin = 2;
@@ -37,6 +39,18 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
+
+void sendCaptureRequest() {
+  if (client.connect(serverIP, serverPort)) {
+    client.println("GET /trigger HTTP/1.1");
+    client.println("Host: " + String(serverIP));
+    client.println("Connection: close");
+    client.println();
+    client.stop();
+  } else {
+    Serial.println("Failed to connect to server.");
+  }
+}
 
   Serial.println("");
   Serial.println("WiFi connected");
@@ -111,6 +125,6 @@ void loop() {
     Serial.println("HTTP Request failed");
   }
   http.end();
-
+  sendCaptureRequest();
   delay(1000); // Adjust the delay as needed
 }
