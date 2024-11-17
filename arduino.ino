@@ -95,9 +95,8 @@ void loop() {
   Serial.print(distance);
   Serial.println(" cm");
 
-  Serial.print("Heart Rate: ");
+  Serial.print("Pulse: ");
   Serial.print(bpm);
-  Serial.println(" bpm");
 
   Serial.print("Soil Moisture: ");
   Serial.println(soilMoisture);
