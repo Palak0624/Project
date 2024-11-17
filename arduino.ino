@@ -98,7 +98,7 @@ void loop() {
   Serial.print("Pulse: ");
   Serial.print(bpm);
 
-  Serial.print("Soil Moisture: ");
+  Serial.print("Moisture: ");
   Serial.println(soilMoisture);
 
   // Check for alert conditions
