@@ -4,11 +4,11 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 
 # Load the saved model
-model = tf.keras.models.load_model("classification_model.h5")
+model = tf.keras.models.load_model("model.h5")
 
 # Define the directories for correct and incorrect images
 test_dirs = [	
-    '/home/yashpinder/testing_images'
+    '/home/palak/images'
 ]
 
 # Define a function to test images in a directory
@@ -24,7 +24,7 @@ def test_images_in_directory(test_dir):
 
             # Make prediction
             prediction = model.predict(img_array)
-            prediction_label = 'Incorrect' if prediction[0] > 0.5 else 'Correct'
+            prediction_label = 'sad' if prediction[0] > 0.5 else 'Correct'
             print(f"Image: {img_name} - Prediction: {prediction_label}")
 
 # Test all images in both the correct and incorrect directories
