@@ -1,13 +1,14 @@
-from flask import Flask, request
-from threading import Thread
-from tkinter import Tk, Label, Button
-from PIL import Image, ImageTk
 import os
 import time
 import numpy as np
 import tensorflow as tf
+from flask import Flask, request
+from threading import Thread
+from tkinter import Tk, Label, Button
+from PIL import Image, ImageTk
 from tensorflow.keras.preprocessing import image
 from picamera2 import Picamera2
+from twilio.rest import Client
 
 # Load the saved model
 model = tf.keras.models.load_model("classification_model.h5")
@@ -21,11 +22,10 @@ picam2.configure(config)
 folder_name = "testing_images"
 os.makedirs(folder_name, exist_ok=True)
 
-# Variables to keep track of predictions
-total_predictions = 0
-correct_predictions = 0
+# Load Twilio credentials (replace with your own)
+from twilio_config import account_sid, auth_token, twilio_number
 
-# Function to predict if the image is correct or incorrect
+# Function to predict sadness and head position
 def predict_image(img_path):
     img = image.load_img(img_path, target_size=(150, 150))
     img_array = image.img_to_array(img)
@@ -33,64 +33,81 @@ def predict_image(img_path):
     img_array /= 255.0
 
     prediction = model.predict(img_array)
-    prediction_label = 'Correct' if prediction[0] <= 0.5 else 'Incorrect'
-    return prediction_label
+
+    # Assuming your model outputs separate probabilities for sadness and position
+    # Modify these class names based on your actual model output
+    sadness_prob = prediction[0][0]  # Probability of being sad
+    head_position_prob = prediction[0][1]  # Probability of head inside pillow
+
+    # You can define thresholds for sadness and position based on your model's behavior
+    is_sad = sadness_prob > 0.7  # Change this threshold based on your model
+    is_head_inside = head_position_prob > 0.8  # Change this threshold based on your model
+
+    return {"is_sad": is_sad, "is_head_inside": is_head_inside}
 
 # Flask setup
 app = Flask(__name__)
 
 @app.route('/trigger', methods=['GET'])
 def trigger_capture():
-    global total_predictions, correct_predictions
-
     # Capture and save the image
     image_filename = os.path.join(folder_name, f"_{int(time.time())}.jpg")
     picam2.capture_file(image_filename)
 
-    # Predict and update accuracy
-    prediction_label = predict_image(image_filename)
-    total_predictions += 1
-    if prediction_label == 'Correct':
-        correct_predictions += 1
+    # Predict sadness and head position
+    predictions = predict_image(image_filename)
+    is_sad = predictions["is_sad"]
+    is_head_inside = predictions["is_head_inside"]
 
-    # Calculate the accuracy percentage
-    accuracy = (correct_predictions / total_predictions) * 100 if total_predictions > 0 else 0
+    # Send alerts based on predictions
+    if is_sad:
+        send_sms_alert("Baby is sad!")
+    if not is_head_inside:
+        send_sms_alert("Baby's head is not inside the pillow!")
 
-    # Update GUI with the current image, prediction, and accuracy
-    update_gui(image_filename, prediction_label, accuracy)
+    # Update GUI with the current image, predictions
+    update_gui(image_filename, is_sad, is_head_inside)
 
-    return {"status": "success", "prediction": prediction_label}
+    return {"status": "success", "is_sad": is_sad, "is_head_inside": is_head_inside}
 
-# Function to update the GUI with the latest image and accuracy
-def update_gui(image_path, prediction, accuracy):
-    # Update current prediction
-    current_prediction_label.config(text=f"Current Prediction: {prediction}")
+def send_sms_alert(message):
+    client = Client(account_sid, auth_token)
+    client.messages.create(
+        to='+1234567890',  # Replace with your target phone number
+        from_=twilio_number,
+        body=message
+    )
+
+def update_gui(image_path, is_sad, is_head_inside):
+    # Update sadness prediction
+    sadness_text = "Baby is Sad" if is_sad else "Baby is Not Sad"
+    current_prediction_label.config(text=f"Sadness: {sadness_text}")
+
+    # Update head position prediction
+    position_text = "Head Inside Pillow" if is_head_inside else "Head Outside Pillow"
+    head_position_label.config(text=f"Head Position: {position_text}")
 
     # Load and display the image
     img = Image.open(image_path).resize((300, 300))  # Resize for display
     img = ImageTk.PhotoImage(img)
     image_display.config(image=img)
     image_display.image = img  # Keep a reference to avoid garbage collection
-
-    # Update the accuracy label
-    accuracy_label.config(text=f"Product Line Accuracy: {accuracy:.2f}%")
-
 # Set up the Tkinter GUI
 root = Tk()
 root.title("Prediction GUI")
-root.geometry("500x600")  # Initial window size
+root.geometry("500x600")
 
 # Display current prediction
-current_prediction_label = Label(root, text="Current Prediction: None", font=("Helvetica", 14))
+current_prediction_label = Label(root, text="Sadness: None", font=("Helvetica", 14))
 current_prediction_label.pack(pady=20)
+
+# Display head position prediction
+head_position_label = Label(root, text="Head Position: None", font=("Helvetica", 14))
+head_position_label.pack(pady=20)
 
 # Display the image
 image_display = Label(root)
 image_display.pack(pady=20)
-
-# Display the accuracy percentage
-accuracy_label = Label(root, text="Product Line Accuracy: 0.00%", font=("Helvetica", 14))
-accuracy_label.pack(pady=20)
 
 # Button to capture and predict
 capture_button = Button(root, text="Capture and Predict", font=("Helvetica", 12), command=lambda: trigger_capture())
